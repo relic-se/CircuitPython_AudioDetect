@@ -10,9 +10,9 @@ try:
     from synthio import EnvelopeState
 except ModuleNotFoundError:
     class EnvelopeState:
-        ATTACK = 0
+        ATTACK = 2
         SUSTAIN = 1
-        RELEASE = 2
+        RELEASE = 0
 
 class Envelope:
 
