@@ -19,11 +19,6 @@ def _nearest_pow2(value: int, max: int = 32) -> int:
 def _is_pow2(value: int, max: int = 32) -> bool:
     return _nearest_pow2(value, max) == value
 
-def _sort_peaks(peaks: tuple|list, heights: tuple|list) -> tuple[float]:
-    peaks = [(x, heights[i]) for i, x in enumerate(peaks)]
-    peaks = sorted(peaks, key=lambda x: x[1], reverse=True)
-    return tuple([x[0] for x in peaks])
-
 try:
     from ulab.utils import spectrogram as fft
 
@@ -57,7 +52,7 @@ try:
 
         return tuple(midpoints)
 
-    def _find_peaks(data: np.ndarray, height: float|None = None, sort: bool = True) -> tuple[float]:
+    def _find_peaks(data: np.ndarray, height: float|None = None) -> tuple[float]:
         peaks = _local_maxima_1d(data)
         peak_heights = np.array([data[i] for i in peaks], dtype=_DTYPE_FLOAT)
 
@@ -67,12 +62,9 @@ try:
         # Remove elements which are less than the height
         peak_heights = np.where(peak_heights > height, peak_heights, 0)
         valid_peaks = np.nonzero(peak_heights)[0]
-        peaks = tuple([peaks[i] for i in valid_peaks])
-        if not sort:
-            return peaks
-        
-        peak_heights = np.array([peak_heights[i] for i in valid_peaks], dtype=_DTYPE_FLOAT)
-        return _sort_peaks(peaks, peak_heights)
+        return tuple([
+            (peaks[i], peak_heights[i]) for i in valid_peaks
+        ])
 
 except ModuleNotFoundError:
     from scipy.fft import fft
@@ -84,13 +76,13 @@ except ModuleNotFoundError:
     def _fftfreq(size: int, spacing: float = 1.0) -> np.ndarray:
         return np.fft.fftfreq(size, spacing)[:size // 2]
 
-    def _find_peaks(data: np.ndarray, height: float|None = None, sort: bool = True) -> tuple[float]:
+    def _find_peaks(data: np.ndarray, height: float|None = None) -> tuple[float]:
         if height is None:
             height = 7 * np.std(data)
         peaks = find_peaks(data, height=height)
-        if not sort:
-            return tuple(peaks[0])
-        return _sort_peaks(peaks[0], peaks[1]["peak_heights"])
+        return tuple([
+            (peaks[0][i], peaks[1]["peak_heights"][i]) for i in range(len(peaks[0]))
+        ])
 
 class Frequency:
 
@@ -108,6 +100,8 @@ class Frequency:
 
         # Linear distribution of indexes used to calculate weighted mean
         self._window_dist = np.arange(self._window_size, dtype=np.int16)
+
+        self._frequencies = None
 
     def _get_frequency(self, index: int, data: np.ndarray) -> float|None:
         # Skip weighted mean if we're at the edge
@@ -135,7 +129,7 @@ class Frequency:
         value_floor, value_ceil = self._fftfreq[index_floor], self._fftfreq[index_ceil]
         return (index - index_floor) * (value_ceil - value_floor) + value_floor
 
-    def process(self, data: list|tuple|array.array|np.ndarray) -> tuple[float]:
+    def process(self, data: list|tuple|array.array|np.ndarray) -> None:
         if len(data) != self._data_size:
             raise ValueError("Data size invalid")
 
@@ -145,18 +139,40 @@ class Frequency:
         # Perform FFT
         data = _fft(data)
 
-        # Find the index of the peaks (sorted by height)
+        # Find the index of the peaks and their heights
         peaks = _find_peaks(data)
 
-        # Calculate frequencies (with windowed weighted mean) for each peak
-        frequencies = [self._get_frequency(index, data) for index in peaks]
+        # Calculate frequencies (with windowed weighted mean) for each peak and pack with height
+        self._frequencies = [(self._get_frequency(index, data), height) for index, height in peaks]
 
         # Remove any values with `None`
-        return tuple(filter(lambda x: x is not None, frequencies))
+        self._frequencies = tuple(filter(lambda x: x[0] is not None, self._frequencies))
+
+    @property
+    def frequencies(self) -> tuple[float]:
+        return tuple([x[0] for x in range(self._frequencies)])
+
+    @property
+    def most_prominent_frequency(self) -> float|None:
+        if not self._frequencies:
+            return None
+        elif len(self._frequencies) == 1:
+            return self._frequencies[0][0]
+        else:
+            return sorted(self._frequencies, key=lambda x: x[1], reverse=True)[0][0]
+
+    @property
+    def lowest_frequency(self) -> float|None:
+        if not self._frequencies:
+            return None
+        return self._frequencies[0][0]
 
 def calculate_frequencies(data: list|tuple|array.array|np.ndarray, sample_rate: int) -> tuple[float]:
     data = data[:_nearest_pow2(len(data))]
-    return Frequency(len(data), sample_rate).process(data)
+    detect = Frequency(len(data), sample_rate)
+    detect.process(data)
+    return detect.frequencies
+
 
 def calculate_frequency(data: list|tuple|array.array|np.ndarray, sample_rate: int) -> float|None:
     frequencies = calculate_frequencies(data, sample_rate)

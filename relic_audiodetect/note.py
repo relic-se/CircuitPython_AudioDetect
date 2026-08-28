@@ -97,10 +97,11 @@ class Note:
         if self._envelope.active:
 
             # Detect frequencies
-            frequencies = self._frequency.process(data)
-            if not frequencies:
+            self._frequency.process(data)
+            frequency = self._frequency.lowest_frequency
+            if not frequency:
                 return None  # exit just in case something went wrong
 
-            self._frequency_value.update(frequencies[0])  # Use frequency with largest peak
+            self._frequency_value.update(frequency)  # Use frequency with largest peak
 
         return state
