@@ -7,5 +7,5 @@
 API Reference
 #############
 
-.. automodule:: audiodetect
+.. automodule:: relic_audiodetect
     :members:
