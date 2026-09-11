@@ -4,7 +4,7 @@
 
 import array
 
-from relic_audiodetect import _prepare_data, decouple_signal, calculate_level, np
+from relic_audiodetect import _prepare_data, decouple_signal, normalized_rms, np
 
 try:
     from synthio import EnvelopeState
@@ -62,7 +62,7 @@ class Envelope:
         data = decouple_signal(data)
 
         # Update level
-        self._level = calculate_level(data)
+        self._level = normalized_rms(data)
         
         # Handle state machine
         level = self.level  # Calculate level using sensitivity (in getter)

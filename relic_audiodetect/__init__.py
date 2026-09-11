@@ -44,8 +44,8 @@ def _prepare_data(data: list|tuple|array.array|np.ndarray) -> np.ndarray:
 def decouple_signal(data: np.ndarray) -> np.ndarray:
     return data - np.mean(data)
 
-def calculate_level(data: np.ndarray) -> float:
-    return np.sum(abs(data)) / len(data)
+def normalized_rms(data: np.ndarray) -> float:
+    return np.std(data)
 
 class MovingAverage:
 
