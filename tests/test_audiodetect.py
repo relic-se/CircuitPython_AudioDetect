@@ -261,6 +261,8 @@ def test_note_frequency_of_second_note():
         note.update(np.zeros(CHUNK_SIZE, dtype=np.float32))
     assert not note.active
 
+    # The attack is reported with the frequency of the samples after the ones the note starts in
+    assert note.update(tone(220)) is None
     assert note.update(tone(220)) == EnvelopeState.ATTACK
     assert note.notename == "A3"
     assert abs(note.frequency - 220) < BIN_WIDTH / 2
@@ -273,9 +275,10 @@ def test_note_attack_waits_for_frequency():
     note.sensitivity = 0.9
     note.update(np.zeros(CHUNK_SIZE, dtype=np.float32))
 
-    assert note.update(noise) is None
-    assert note.active
-    assert note.notenum is None
+    for _ in range(3):
+        assert note.update(noise) is None
+        assert note.active
+        assert note.notenum is None
 
     assert note.update(tone(440)) == EnvelopeState.ATTACK
     assert note.notename == "A4"
@@ -302,6 +305,45 @@ def test_note_follows_new_frequency():
     for _ in range(3):
         note.update(tone(440))  # the same level, so the envelope does not start a new note
     assert note.notename == "A4"
+
+
+@pytest.mark.parametrize(
+    ("frequency", "notenum"), ((220.0, 57), (329.63, 64), (440.0, 69), (659.26, 76), (880.0, 81))
+)
+def test_note_at_attack(frequency, notenum):
+    """The note that is reported with the attack is right wherever in the samples it starts."""
+    size = 512
+    time = np.arange(6 * size) / SAMPLE_RATE
+    for phase in range(4):
+        played = sum(
+            level * np.sin((index + 1) * (2 * np.pi * frequency * time + phase * math.pi / 2))
+            for index, level in enumerate((1.0, 0.5, 0.3, 0.2))
+        )
+        played = (0.42 * played / np.max(np.abs(played))).astype(np.float32)
+        for start in range(0, size, size // 16):
+            data = np.concatenate([np.zeros(2 * size + start, dtype=np.float32), played])
+            note = Note(size, SAMPLE_RATE)
+            note.sensitivity = 0.9
+            reported = None
+            for i in range(len(data) // size):
+                if note.update(data[i * size : (i + 1) * size]) == EnvelopeState.ATTACK:
+                    reported = note.notenum
+                    break
+            assert reported == notenum, f"note starts at sample {start} with phase {phase}"
+
+
+def test_note_keeps_frequency_until_next_attack():
+    note = Note(CHUNK_SIZE, SAMPLE_RATE)
+    note.sensitivity = 0.9
+    for _ in range(4):
+        note.update(tone(440))
+    for _ in range(2):
+        note.update(np.zeros(CHUNK_SIZE, dtype=np.float32))
+    assert note.notename == "A4"  # of the note that ended
+    note.update(tone(220))
+    assert note.notename == "A4"  # the new note has started, but is not known yet
+    assert note.update(tone(220)) == EnvelopeState.ATTACK
+    assert note.notename == "A3"
 
 
 def test_note_reset():
