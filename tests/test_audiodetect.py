@@ -16,7 +16,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from relic_audiodetect import MovingMedian
 from relic_audiodetect.envelope import Envelope, EnvelopeState
-from relic_audiodetect.frequency import Frequency, _fft, _find_peaks, calculate_frequencies, calculate_frequency
+from relic_audiodetect.frequency import (
+    Frequency,
+    _fft,  # noqa: PLC2701
+    _find_peaks,  # noqa: PLC2701
+    calculate_frequencies,
+    calculate_frequency,
+)
 from relic_audiodetect.note import Note
 
 SAMPLE_RATE = 44100
@@ -109,7 +115,9 @@ def test_frequency_data_size():
         Frequency(CHUNK_SIZE, SAMPLE_RATE).process(tone(440, 1024))
 
 
-@pytest.mark.parametrize("frequency", (82.41, 110.0, 146.83, 196.0, 246.94, 329.63, 440.0, 880.0, 1046.5))
+@pytest.mark.parametrize(
+    "frequency", (82.41, 110.0, 146.83, 196.0, 246.94, 329.63, 440.0, 880.0, 1046.5)
+)
 @pytest.mark.parametrize("harmonics", ((1.0,), (1.0, 0.5, 0.3, 0.2)))
 def test_frequency_of_tone_is_in_tune(frequency, harmonics):
     """A tone is found to within 10 cents wherever it lies between two indexes of the spectrum."""
@@ -233,7 +241,7 @@ def test_envelope_level_follows_sensitivity():
 def test_note_of_tone():
     note = Note(CHUNK_SIZE, SAMPLE_RATE)
     note.sensitivity = 0.9
-    assert note.notename == ""
+    assert not note.notename
     assert note.notenum is None
 
     for _ in range(5):
@@ -400,10 +408,12 @@ def test_note_reset():
     note.reset()
     assert not note.active
     assert note.frequency is None
-    assert note.notename == ""
+    assert not note.notename
 
 
-@pytest.mark.xfail(reason="A spectrum of 2048 samples is too coarse for the lowest notes", strict=False)
+@pytest.mark.xfail(
+    reason="A spectrum of 2048 samples is too coarse for the lowest notes", strict=False
+)
 @pytest.mark.parametrize(("filename", "frequency", "name"), RECORDINGS)
 def test_note_of_recording(filename, frequency, name):
     data = read_recording(filename)

@@ -29,26 +29,31 @@ import array
 
 try:
     import ulab.numpy as np
+
     _DTYPE_FLOAT = np.float
-except ModuleNotFoundError:
+except ImportError:
     import numpy as np
+
     _DTYPE_FLOAT = np.float32
 
-def _prepare_data(data: list|tuple|array.array|np.ndarray) -> np.ndarray:
+
+def _prepare_data(data: list | tuple | array.array | np.ndarray) -> np.ndarray:
     if type(data) is not np.ndarray or data.dtype != _DTYPE_FLOAT:
         # Convert our data to an np.ndarray object with float values ranging from -1.0 to 1.0
-        return np.array(data, dtype=_DTYPE_FLOAT) / (2 ** 15)
+        return np.array(data, dtype=_DTYPE_FLOAT) / (2**15)
     else:
         return data
+
 
 def decouple_signal(data: np.ndarray) -> np.ndarray:
     return data - np.mean(data)
 
+
 def normalized_rms(data: np.ndarray) -> float:
     return np.std(data)
 
-class MovingMedian:
 
+class MovingMedian:
     def __init__(self, count: int = 5):
         self._count = count
         self.reset()
@@ -64,7 +69,7 @@ class MovingMedian:
             self._items.pop(0)
 
     @property
-    def value(self) -> float|None:
+    def value(self) -> float | None:
         if self._value is None and self._items:
             # The middle of the values. With an even number of values the lower one of the two
             # in the middle is used, so that the result is always a value that was given.

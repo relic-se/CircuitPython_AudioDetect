@@ -8,20 +8,25 @@ from relic_audiodetect import _prepare_data, decouple_signal, normalized_rms, np
 
 try:
     from synthio import EnvelopeState
-except ModuleNotFoundError:
+except ImportError:
+
     class EnvelopeState:
         ATTACK = 2
         SUSTAIN = 1
         RELEASE = 0
 
-class Envelope:
 
+class Envelope:
     def __init__(
         self,
         sensitivity: float = 0.25,
-        attack: float = 1,  # begins calculation when level (relative to sensitivity) is above this value
-        sustain: float = 0.9,  # if level dips below this threshold (relative to sensitivity) and then rises above attack again, it will be interpretted as a new note
-        release: float = 0.1,  # ends calculation when level (relative to sensitivity) is below this value
+        # begins calculation when level (relative to sensitivity) is above this value
+        attack: float = 1,
+        # if level dips below this threshold (relative to sensitivity) and then rises above attack
+        # again, it will be interpreted as a new note
+        sustain: float = 0.9,
+        # ends calculation when level (relative to sensitivity) is below this value
+        release: float = 0.1,
     ):
         self._sensitivity = min(max(sensitivity, 0.0), 1.0)
         self._attack = min(max(attack, 0.0001), 1.0)
@@ -51,22 +56,25 @@ class Envelope:
         return min(self._level / max(1 - self._sensitivity, 0.0001), 1.0)
 
     @property
-    def state(self) -> EnvelopeState|None:
+    def state(self) -> EnvelopeState | None:
         return self._state
 
-    def update(self, data: list|tuple|array.array|np.ndarray) -> EnvelopeState|None:
+    def update(self, data: list | tuple | array.array | np.ndarray) -> EnvelopeState | None:
         # Convert to float
         data = _prepare_data(data)
-        
+
         # Decouple signal (re-center around mean)
         data = decouple_signal(data)
 
         # Update level
         self._level = normalized_rms(data)
-        
+
         # Handle state machine
         level = self.level  # Calculate level using sensitivity (in getter)
-        if self._state in {None, EnvelopeState.SUSTAIN, EnvelopeState.RELEASE} and level >= self._attack:
+        if (
+            self._state in {None, EnvelopeState.SUSTAIN, EnvelopeState.RELEASE}
+            and level >= self._attack
+        ):
             self._state = EnvelopeState.ATTACK
         elif self._state is not EnvelopeState.RELEASE and level <= self._release:
             self._state = EnvelopeState.RELEASE
@@ -74,6 +82,6 @@ class Envelope:
             self._state = EnvelopeState.SUSTAIN
         else:
             return None  # no change occurred
-        
+
         # Return new state on change
         return self._state

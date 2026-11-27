@@ -5,19 +5,22 @@
 import array
 import math
 
-from relic_audiodetect import _prepare_data, np, _DTYPE_FLOAT
+from relic_audiodetect import _DTYPE_FLOAT, _prepare_data, np
+
 
 def _nearest_pow2(value: int, max: int = 32) -> int:
     for i in range(1, max + 1):
-        current = 2 ** i
+        current = 2**i
         if current > value:
             return 2 ** (i - 1)
         elif current == value:
             return value
     return None
 
+
 def _is_pow2(value: int, max: int = 32) -> bool:
     return _nearest_pow2(value, max) == value
+
 
 def _fft(data: np.ndarray) -> np.ndarray:
     # Magnitude of the lower half of the spectrum. Calculated from the FFT directly because
@@ -31,7 +34,8 @@ def _fft(data: np.ndarray) -> np.ndarray:
         return np.sqrt(real * real + imag * imag)
     return abs(result[:half])
 
-def _find_peaks(data: np.ndarray, height: float|None = None) -> tuple[float]:
+
+def _find_peaks(data: np.ndarray, height: float | None = None) -> tuple[float]:
     if height is None:
         height = 7 * np.std(data)
 
@@ -46,8 +50,8 @@ def _find_peaks(data: np.ndarray, height: float|None = None) -> tuple[float]:
 
     return tuple([(int(i) + 1, values[i]) for i in np.nonzero(values)[0]])
 
-class Frequency:
 
+class Frequency:
     def __init__(self, data_size: int, sample_rate: int):
         if not _is_pow2(data_size):
             raise ValueError("data_size must be a power of 2")
@@ -77,7 +81,7 @@ class Frequency:
                     offset = 0.5 * (left - right) / curve
         return (index + offset) * self._sample_rate / self._data_size
 
-    def process(self, data: list|tuple|array.array|np.ndarray) -> None:
+    def process(self, data: list | tuple | array.array | np.ndarray) -> None:
         if len(data) != self._data_size:
             raise ValueError("Data size invalid")
 
@@ -105,7 +109,7 @@ class Frequency:
         return tuple([x[0] for x in self._frequencies])
 
     @property
-    def most_prominent_frequency(self) -> float|None:
+    def most_prominent_frequency(self) -> float | None:
         if not self._frequencies:
             return None
         elif len(self._frequencies) == 1:
@@ -114,18 +118,23 @@ class Frequency:
             return sorted(self._frequencies, key=lambda x: x[1], reverse=True)[0][0]
 
     @property
-    def lowest_frequency(self) -> float|None:
+    def lowest_frequency(self) -> float | None:
         if not self._frequencies:
             return None
         return self._frequencies[0][0]
 
-def calculate_frequencies(data: list|tuple|array.array|np.ndarray, sample_rate: int) -> tuple[float]:
-    data = data[:_nearest_pow2(len(data))]
+
+def calculate_frequencies(
+    data: list | tuple | array.array | np.ndarray, sample_rate: int
+) -> tuple[float]:
+    data = data[: _nearest_pow2(len(data))]
     detect = Frequency(len(data), sample_rate)
     detect.process(data)
     return detect.frequencies
 
 
-def calculate_frequency(data: list|tuple|array.array|np.ndarray, sample_rate: int) -> float|None:
+def calculate_frequency(
+    data: list | tuple | array.array | np.ndarray, sample_rate: int
+) -> float | None:
     frequencies = calculate_frequencies(data, sample_rate)
     return frequencies[0] if frequencies else None
