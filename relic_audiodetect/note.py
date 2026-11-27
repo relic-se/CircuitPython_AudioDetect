@@ -81,7 +81,7 @@ class Note:
             return self._cents
         if (notenum := self.notenum) is None:
             return None
-        self._cents = 1200.0 * math.log(self._frequency_value.value / midi_to_hz(notenum))
+        self._cents = 1200.0 * math.log(self._frequency_value.value / midi_to_hz(notenum), 2)
         return self._cents
 
     def update(self, data: list|tuple|array.array|np.ndarray) -> EnvelopeState|None:
