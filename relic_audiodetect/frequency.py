@@ -90,13 +90,14 @@ except ModuleNotFoundError:
 
 class Frequency:
 
-    def __init__(self, data_size: int, sample_rate: int, window_size: int = 17):
+    def __init__(self, data_size: int, sample_rate: int, window_size: int = 3):
         if not _is_pow2(data_size):
             raise ValueError("data_size must be a power of 2")
         
         self._data_size = data_size
         self._sample_rate = sample_rate
-        self._window_size = min(window_size + 1 if (window_size % 2) == 0 else window_size, 3)
+        # The window needs a center, so it must be odd and at least 3 wide
+        self._window_size = max(window_size + 1 if (window_size % 2) == 0 else window_size, 3)
         self._half_window_size = self._window_size // 2
 
         # Calculate fftfreq plot
@@ -109,7 +110,7 @@ class Frequency:
 
     def _get_frequency(self, index: int, data: np.ndarray) -> float|None:
         # Skip weighted mean if we're at the edge
-        if index <= self._half_window_size or index >= self._data_size - self._half_window_size - 1:
+        if index < self._half_window_size or index >= len(data) - self._half_window_size:
             return self._fftfreq[index]
 
         # Isolate the window area
