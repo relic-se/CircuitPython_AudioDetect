@@ -5,7 +5,7 @@
 import array
 import math
 
-from relic_audiodetect import _prepare_data, np, _DTYPE_FLOAT
+from relic_audiodetect import _prepare_data, np
 
 def _nearest_pow2(value: int, max: int = 32) -> int:
     for i in range(1, max + 1):
@@ -35,42 +35,20 @@ def _fftfreq(size: int, spacing: float = 1.0) -> np.ndarray:
     # Frequency of each index of the lower half of the spectrum
     return np.arange(size // 2, dtype=np.int16) / (size * spacing)
 
-def _local_maxima_1d(data: np.ndarray) -> tuple:
-    midpoints = []
-
-    i = 1
-    while i < len(data) - 1:
-        # Test if previous sample is smaller
-        if data[i - 1] < data[i]:
-
-            # Find next sample that is unequal to x[i]
-            j = i + 1  # Index to look ahead of current sample
-            while j < len(data) - 1 and data[j] == data[i]:
-                j += 1
-
-            # Maxima is found if next unequal sample is smaller than x[i]
-            if data[j] < data[i]:
-                midpoints.append((i + j - 1) // 2)
-
-                # Skip samples that can't be maximum
-                i = j
-        i += 1
-
-    return tuple(midpoints)
-
 def _find_peaks(data: np.ndarray, height: float|None = None) -> tuple[float]:
-    peaks = _local_maxima_1d(data)
-    peak_heights = np.array([data[i] for i in peaks], dtype=_DTYPE_FLOAT)
-
     if height is None:
         height = 7 * np.std(data)
 
-    # Remove elements which are less than the height
-    peak_heights = np.where(peak_heights > height, peak_heights, 0)
-    valid_peaks = np.nonzero(peak_heights)[0]
-    return tuple([
-        (peaks[i], peak_heights[i]) for i in valid_peaks
-    ])
+    # A peak is higher than the value before it, and not lower than the value after it. This is
+    # done with whole arrays, because a loop over the spectrum takes most of the time otherwise.
+    values = data[1:-1]
+    values = np.where(values > data[:-2], values, 0)
+    values = np.where(values >= data[2:], values, 0)
+
+    # Remove peaks which are less than the height
+    values = np.where(values > height, values, 0)
+
+    return tuple([(int(i) + 1, values[i]) for i in np.nonzero(values)[0]])
 
 class Frequency:
 
