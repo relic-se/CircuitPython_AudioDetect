@@ -5,7 +5,7 @@
 import array
 import math
 
-from relic_audiodetect import _prepare_data, np
+from relic_audiodetect import _prepare_data, np, _DTYPE_FLOAT
 
 def _nearest_pow2(value: int, max: int = 32) -> int:
     for i in range(1, max + 1):
@@ -31,10 +31,6 @@ def _fft(data: np.ndarray) -> np.ndarray:
         return np.sqrt(real * real + imag * imag)
     return abs(result[:half])
 
-def _fftfreq(size: int, spacing: float = 1.0) -> np.ndarray:
-    # Frequency of each index of the lower half of the spectrum
-    return np.arange(size // 2, dtype=np.int16) / (size * spacing)
-
 def _find_peaks(data: np.ndarray, height: float|None = None) -> tuple[float]:
     if height is None:
         height = 7 * np.std(data)
@@ -52,49 +48,34 @@ def _find_peaks(data: np.ndarray, height: float|None = None) -> tuple[float]:
 
 class Frequency:
 
-    def __init__(self, data_size: int, sample_rate: int, window_size: int = 3):
+    def __init__(self, data_size: int, sample_rate: int):
         if not _is_pow2(data_size):
             raise ValueError("data_size must be a power of 2")
-        
+
         self._data_size = data_size
         self._sample_rate = sample_rate
-        # The window needs a center, so it must be odd and at least 3 wide
-        self._window_size = max(window_size + 1 if (window_size % 2) == 0 else window_size, 3)
-        self._half_window_size = self._window_size // 2
 
-        # Calculate fftfreq plot
-        self._fftfreq = _fftfreq(self._data_size, 1 / self._sample_rate)
-
-        # Linear distribution of indexes used to calculate weighted mean
-        self._window_dist = np.arange(self._window_size, dtype=np.int16)
+        # Hann window. Without it, the samples start and end abruptly, which spreads a tone over
+        # the whole spectrum and moves its peak.
+        self._window = 0.5 - 0.5 * np.cos(
+            np.arange(data_size, dtype=_DTYPE_FLOAT) * (2 * math.pi / data_size)
+        )
 
         self._frequencies = None
 
-    def _get_frequency(self, index: int, data: np.ndarray) -> float|None:
-        # Skip weighted mean if we're at the edge
-        if index < self._half_window_size or index >= len(data) - self._half_window_size:
-            return self._fftfreq[index]
-
-        # Isolate the window area
-        window = data[index - self._half_window_size:index + self._half_window_size + 1]
-
-        # Get the center index using weighted mean
-        window_sum = np.sum(window)
-        if window_sum <= 0:
-            return None
-        weighted_index = np.sum(window * self._window_dist) / window_sum
-
-        # Adjust index by weighted mean
-        index += weighted_index - (self._half_window_size)
-
-        # Check if we're centered at a frequency index
-        index_floor, index_ceil = math.floor(index), math.ceil(index)
-        if index_floor == index_ceil:
-            return self._fftfreq[index]
-
-        # Perform linear interpolation to adjust detected frequency
-        value_floor, value_ceil = self._fftfreq[index_floor], self._fftfreq[index_ceil]
-        return (index - index_floor) * (value_ceil - value_floor) + value_floor
+    def _get_frequency(self, index: int, data: np.ndarray) -> float:
+        # A tone usually lies between two indexes of the spectrum. Through a Hann window its peak
+        # is close to a parabola on a logarithmic scale, so the top of the parabola through the
+        # peak and its two neighbors is where the tone is.
+        offset = 0.0
+        if 0 < index < len(data) - 1:
+            left, center, right = data[index - 1], data[index], data[index + 1]
+            if left > 0 and center > 0 and right > 0:
+                left, center, right = math.log(left), math.log(center), math.log(right)
+                curve = left - 2 * center + right
+                if curve < 0:
+                    offset = 0.5 * (left - right) / curve
+        return (index + offset) * self._sample_rate / self._data_size
 
     def process(self, data: list|tuple|array.array|np.ndarray) -> None:
         if len(data) != self._data_size:
@@ -103,17 +84,19 @@ class Frequency:
         # Convert data to float
         data = _prepare_data(data)
 
+        # Remove any offset and apply the window
+        data = (data - np.mean(data)) * self._window
+
         # Perform FFT
         data = _fft(data)
 
         # Find the index of the peaks and their heights
         peaks = _find_peaks(data)
 
-        # Calculate frequencies (with windowed weighted mean) for each peak and pack with height
-        self._frequencies = [(self._get_frequency(index, data), height) for index, height in peaks]
-
-        # Remove any values with `None`
-        self._frequencies = tuple(filter(lambda x: x[0] is not None, self._frequencies))
+        # Calculate the interpolated frequency of each peak and pack with height
+        self._frequencies = tuple(
+            [(self._get_frequency(index, data), height) for index, height in peaks]
+        )
 
     @property
     def frequencies(self) -> tuple[float]:

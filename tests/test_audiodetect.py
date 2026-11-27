@@ -108,9 +108,26 @@ def test_frequency_data_size():
         Frequency(CHUNK_SIZE, SAMPLE_RATE).process(tone(440, 1024))
 
 
-@pytest.mark.parametrize(("argument", "expected"), ((1, 3), (3, 3), (4, 5), (5, 5), (17, 17)))
-def test_frequency_window_size(argument, expected):
-    assert Frequency(CHUNK_SIZE, SAMPLE_RATE, argument)._window_size == expected
+@pytest.mark.parametrize("frequency", (82.41, 110.0, 146.83, 196.0, 246.94, 329.63, 440.0, 880.0, 1046.5))
+@pytest.mark.parametrize("harmonics", ((1.0,), (1.0, 0.5, 0.3, 0.2)))
+def test_frequency_of_tone_is_in_tune(frequency, harmonics):
+    """A tone is found to within 10 cents wherever it lies between two indexes of the spectrum."""
+    detect = Frequency(CHUNK_SIZE, SAMPLE_RATE)
+    time = np.arange(CHUNK_SIZE) / SAMPLE_RATE
+    for step in range(16):
+        phase = step * math.pi / 8
+        data = sum(
+            level * np.sin((index + 1) * (2 * np.pi * frequency * time + phase))
+            for index, level in enumerate(harmonics)
+        )
+        detect.process((0.4 * data / sum(harmonics)).astype(np.float32))
+        assert abs(cents(detect.lowest_frequency, frequency)) < 10
+
+
+def test_frequency_ignores_offset():
+    detect = Frequency(CHUNK_SIZE, SAMPLE_RATE)
+    detect.process(tone(440) + 0.25)
+    assert abs(cents(detect.lowest_frequency, 440)) < 10
 
 
 def reference_peaks(data: np.ndarray) -> list:
@@ -162,7 +179,6 @@ def test_frequency_of_recording(filename, frequency, name):
     assert abs(detected - frequency) < BIN_WIDTH
 
 
-@pytest.mark.xfail(reason="A spectrum of 2048 samples is too coarse for tuning", strict=False)
 @pytest.mark.parametrize(("filename", "frequency", "name"), RECORDINGS)
 def test_frequency_of_recording_is_in_tune(filename, frequency, name):
     """A tuner needs to be within a few cents. The recordings are assumed to be within 15."""
