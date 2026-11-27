@@ -15,7 +15,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from relic_audiodetect.envelope import Envelope, EnvelopeState
-from relic_audiodetect.frequency import Frequency, calculate_frequencies, calculate_frequency
+from relic_audiodetect.frequency import Frequency, _fft, _find_peaks, calculate_frequencies, calculate_frequency
 from relic_audiodetect.note import Note
 
 SAMPLE_RATE = 44100
@@ -111,6 +111,42 @@ def test_frequency_data_size():
 @pytest.mark.parametrize(("argument", "expected"), ((1, 3), (3, 3), (4, 5), (5, 5), (17, 17)))
 def test_frequency_window_size(argument, expected):
     assert Frequency(CHUNK_SIZE, SAMPLE_RATE, argument)._window_size == expected
+
+
+def reference_peaks(data: np.ndarray) -> list:
+    """The peaks of a spectrum, found one value at a time."""
+    height = 7 * np.std(data)
+    return [
+        i
+        for i in range(1, len(data) - 1)
+        if data[i - 1] < data[i] and data[i] >= data[i + 1] and data[i] > height
+    ]
+
+
+@pytest.mark.parametrize(("filename", "frequency", "name"), RECORDINGS)
+def test_peaks_of_recording(filename, frequency, name):
+    data = read_recording(filename)
+    count = 0
+    for i in range(len(data) // CHUNK_SIZE):
+        spectrum = _fft(data[i * CHUNK_SIZE : (i + 1) * CHUNK_SIZE])
+        peaks = _find_peaks(spectrum)
+        assert [index for index, height in peaks] == reference_peaks(spectrum)
+        assert all(height == spectrum[index] for index, height in peaks)
+        count += len(peaks)
+    assert count > 0
+
+
+def test_peaks_of_flat_data():
+    assert _find_peaks(np.zeros(64, dtype=np.float32)) == ()
+    assert _find_peaks(np.ones(64, dtype=np.float32)) == ()
+
+
+def test_peak_height():
+    data = np.zeros(64, dtype=np.float32)
+    data[10] = 2.0
+    data[20] = 5.0
+    assert [index for index, height in _find_peaks(data, height=1.0)] == [10, 20]
+    assert [index for index, height in _find_peaks(data, height=3.0)] == [20]
 
 
 def test_calculate_frequency():
