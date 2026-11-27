@@ -213,6 +213,22 @@ def test_note_frequency_of_second_note():
     assert abs(note.frequency - 220) < BIN_WIDTH / 2
 
 
+def test_note_attack_waits_for_frequency():
+    # Noise is loud enough to start a note, but its spectrum has no peak
+    noise = np.random.default_rng(0).uniform(-0.5, 0.5, CHUNK_SIZE).astype(np.float32)
+    note = Note(CHUNK_SIZE, SAMPLE_RATE)
+    note.sensitivity = 0.9
+    note.update(np.zeros(CHUNK_SIZE, dtype=np.float32))
+
+    assert note.update(noise) is None
+    assert note.active
+    assert note.notenum is None
+
+    assert note.update(tone(440)) == EnvelopeState.ATTACK
+    assert note.notename == "A4"
+    assert note.update(tone(440)) is None
+
+
 def test_note_reset():
     note = Note(CHUNK_SIZE, SAMPLE_RATE)
     note.sensitivity = 0.9

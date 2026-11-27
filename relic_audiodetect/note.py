@@ -30,6 +30,7 @@ class Note:
     def reset(self) -> None:
         self._envelope.reset()
         self._frequency_value.reset()
+        self._attack_pending = False
         self._notenum = self._notename = self._cents = None
 
     @property
@@ -96,6 +97,9 @@ class Note:
         # The frequency of a new note is not averaged with the frequency of the previous note
         if state == EnvelopeState.ATTACK:
             self._frequency_value.reset()
+            self._attack_pending = True
+        elif state == EnvelopeState.RELEASE:
+            self._attack_pending = False
 
         # Process signal if we're active
         if self._envelope.active:
@@ -103,9 +107,14 @@ class Note:
             # Detect frequencies
             self._frequency.process(data)
             frequency = self._frequency.lowest_frequency
-            if not frequency:
-                return None  # exit just in case something went wrong
+            if frequency:
+                self._frequency_value.update(frequency)  # Use frequency with largest peak
 
-            self._frequency_value.update(frequency)  # Use frequency with largest peak
+            # The attack of a note is reported once its frequency is known
+            if self._attack_pending:
+                if self._frequency_value.value is None:
+                    return None
+                self._attack_pending = False
+                return EnvelopeState.ATTACK
 
         return state
