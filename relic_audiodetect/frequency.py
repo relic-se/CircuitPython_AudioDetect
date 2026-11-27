@@ -20,10 +20,14 @@ def _is_pow2(value: int, max: int = 32) -> bool:
     return _nearest_pow2(value, max) == value
 
 try:
-    from ulab.utils import spectrogram as fft
+    import ulab  # noqa: F401 (the fallback below is used if ulab is not available)
 
     def _fft(data: np.ndarray) -> np.ndarray:
-        return fft(data)[:len(data) // 2]
+        # Calculate the magnitude from the FFT directly. `ulab.utils.spectrogram` returns
+        # incorrect results on builds of ulab without complex number support (ulab 6.12).
+        real, imag = np.fft.fft(data)
+        real, imag = real[:len(data) // 2], imag[:len(data) // 2]
+        return np.sqrt(real * real + imag * imag)
 
     def _fftfreq(size: int, spacing: float = 1.0) -> np.ndarray:
         # we're ignoring imaginary half
