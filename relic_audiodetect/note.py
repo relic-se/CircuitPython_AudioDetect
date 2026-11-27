@@ -5,7 +5,7 @@
 import array
 import math
 
-from relic_audiodetect import MovingAverage, np, _prepare_data
+from relic_audiodetect import MovingMedian, np, _prepare_data
 from relic_audiodetect.envelope import Envelope, EnvelopeState
 from relic_audiodetect.frequency import Frequency
 
@@ -20,10 +20,12 @@ _NOTE_NAMES = ["A", "A#/Bb", "B", "C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb",
 
 class Note:
 
-    def __init__(self, data_size: int, sample_rate: int, average_count: int = 5):
+    def __init__(self, data_size: int, sample_rate: int, median_count: int = 5):
         self._envelope = Envelope()
         self._frequency = Frequency(data_size, sample_rate)
-        self._frequency_value = MovingAverage(average_count)
+        # The median of the last frequencies. Unlike an average, it is not moved by a single
+        # update that found a harmonic or noise instead of the note.
+        self._frequency_value = MovingMedian(median_count)
 
         self.reset()
 

@@ -14,6 +14,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from relic_audiodetect import MovingMedian
 from relic_audiodetect.envelope import Envelope, EnvelopeState
 from relic_audiodetect.frequency import Frequency, _fft, _find_peaks, calculate_frequencies, calculate_frequency
 from relic_audiodetect.note import Note
@@ -281,6 +282,28 @@ def test_note_attack_waits_for_frequency():
     assert note.update(tone(440)) is None
 
 
+def test_note_ignores_single_wrong_frequency():
+    note = Note(CHUNK_SIZE, SAMPLE_RATE)
+    note.sensitivity = 0.9
+    for _ in range(3):
+        note.update(tone(220))
+    note.update(tone(440))  # as when one update finds the second harmonic instead of the note
+    assert note.notename == "A3"
+    assert abs(note.frequency - 220) < 1
+    note.update(tone(220))
+    assert note.notename == "A3"
+
+
+def test_note_follows_new_frequency():
+    note = Note(CHUNK_SIZE, SAMPLE_RATE)
+    note.sensitivity = 0.9
+    for _ in range(5):
+        note.update(tone(220))
+    for _ in range(3):
+        note.update(tone(440))  # the same level, so the envelope does not start a new note
+    assert note.notename == "A4"
+
+
 def test_note_reset():
     note = Note(CHUNK_SIZE, SAMPLE_RATE)
     note.sensitivity = 0.9
@@ -304,3 +327,24 @@ def test_note_of_recording(filename, frequency, name):
             names.append(note.notename)
     assert names
     assert max(set(names), key=names.count) == name
+
+
+# MovingMedian
+
+
+def test_moving_median():
+    median = MovingMedian(5)
+    assert median.value is None
+    median.update(3.0)
+    assert median.value == 3.0
+    median.update(9.0)
+    assert median.value == 3.0  # the lower of the two values in the middle
+    median.update(4.0)
+    assert median.value == 4.0
+    for value in (100.0, 1.0):
+        median.update(value)
+    assert median.value == 4.0  # of 3, 9, 4, 100, 1
+    median.update(5.0)
+    assert median.value == 5.0  # of 9, 4, 100, 1, 5: the oldest value is dropped
+    median.reset()
+    assert median.value is None
