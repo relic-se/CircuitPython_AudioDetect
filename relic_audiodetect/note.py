@@ -96,10 +96,12 @@ class Note:
         # Update envelope
         state = self._envelope.update(data)
 
-        # The frequency of a new note is not averaged with the frequency of the previous note
         if state == EnvelopeState.ATTACK:
-            self._frequency_value.reset()
+            # The frequency of a note is not taken from the samples in which it starts. The note
+            # only fills a part of them, and what is found in them is often another note. The
+            # attack is reported with the frequency of the samples that follow.
             self._attack_pending = True
+            return None
         elif state == EnvelopeState.RELEASE:
             self._attack_pending = False
 
@@ -110,11 +112,14 @@ class Note:
             self._frequency.process(data)
             frequency = self._frequency.lowest_frequency
             if frequency:
+                if self._attack_pending:
+                    # The frequency of a new note is not smoothed with that of the previous note
+                    self._frequency_value.reset()
                 self._frequency_value.update(frequency)  # Use frequency with largest peak
 
             # The attack of a note is reported once its frequency is known
             if self._attack_pending:
-                if self._frequency_value.value is None:
+                if not frequency:
                     return None
                 self._attack_pending = False
                 return EnvelopeState.ATTACK
