@@ -47,36 +47,6 @@ def decouple_signal(data: np.ndarray) -> np.ndarray:
 def normalized_rms(data: np.ndarray) -> float:
     return np.std(data)
 
-class MovingAverage:
-
-    def __init__(self, count: int = 3, weighted: bool = False):
-        self._count = count
-        self._weights = np.arange(count, dtype=np.float) / count / 2 if weighted else None
-        self.reset()
-
-    def reset(self) -> None:
-        self._items = None
-        self._value = None
-
-    def update(self, value: float) -> None:
-        self._value = None
-        if self._items is None:
-            self._items = np.full(self._count, value)
-        else:
-            self._items[1:] = self._items[:len(self._items)-1]
-            self._items[0] = value
-
-    @property
-    def value(self) -> float|None:
-        if self._value is not None:
-            return self._value
-        if self._items is None:
-            return None
-        if self._weights is None:
-            return np.mean(self._items)
-        else:
-            return np.sum(self._items * self._weights)
-
 class MovingMedian:
 
     def __init__(self, count: int = 5):
