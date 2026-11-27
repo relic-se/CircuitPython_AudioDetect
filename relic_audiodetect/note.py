@@ -2,6 +2,15 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""
+`relic_audiodetect.note`
+================================================================================
+
+Detect musical notes, their pitch and their tuning within an audio signal.
+
+* Author(s): Cooper Dalrymple
+"""
+
 import array
 import math
 
@@ -22,12 +31,29 @@ _NOTE_NAMES = ["A", "A#/Bb", "B", "C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb",
 
 
 class Note:
+    """Detects musical notes within a stream of audio. It combines an
+    :class:`~relic_audiodetect.envelope.Envelope` to find when notes start and end, a
+    :class:`~relic_audiodetect.frequency.Frequency` to find their pitch, and a
+    :class:`~relic_audiodetect.MovingMedian` to smooth the pitch over time.
+
+    Call :meth:`update` with each new block of samples. The pitch of the current note is then
+    available from :attr:`frequency`, :attr:`notenum`, :attr:`notename` and :attr:`cents`.
+
+    :param int data_size: The number of samples in each block given to :meth:`update`. Must be
+        a power of 2. Larger blocks detect lower notes more accurately, but respond more slowly.
+    :param int sample_rate: The sample rate of the audio in Hz.
+    :param int median_count: The number of updates the frequency is smoothed over. Defaults to 5.
+    :param int attack_updates: The number of updates between the start of a note and the report
+        of its attack. If each block of samples overlaps with the block before it, increase this
+        so that the frequency is measured from samples which the note fills. Defaults to 1.
+    """
+
     def __init__(
         self,
         data_size: int,
         sample_rate: int,
         median_count: int = 5,
-        attack_updates: int = 1,  # updates between the start of a note and the report of its attack
+        attack_updates: int = 1,
     ):
         self._envelope = Envelope()
         self._frequency = Frequency(data_size, sample_rate)
@@ -44,6 +70,7 @@ class Note:
         self.reset()
 
     def reset(self) -> None:
+        """Clear the current note and envelope state."""
         self._envelope.reset()
         self._frequency_value.reset()
         self._attack_wait = 0  # updates left until the attack of the current note is reported
@@ -51,6 +78,8 @@ class Note:
 
     @property
     def sensitivity(self) -> float:
+        """How sensitive detection is to quiet notes, from 0.0 to 1.0. Higher values detect
+        quieter notes. See :attr:`relic_audiodetect.envelope.Envelope.sensitivity`."""
         return self._envelope.sensitivity
 
     @sensitivity.setter
@@ -59,22 +88,27 @@ class Note:
 
     @property
     def active(self) -> bool:
+        """Whether a note is currently being detected."""
         return self._envelope.active
 
     @property
     def level(self) -> float:
+        """The level of the last update scaled by :attr:`sensitivity`, from 0.0 to 1.0."""
         return self._envelope.level
 
     @property
     def state(self) -> EnvelopeState | None:
+        """The current state of the envelope, or ``None`` before any note has been detected."""
         return self._envelope.state
 
     @property
     def frequency(self) -> float | None:
+        """The smoothed frequency of the current note in Hz, or ``None`` if it is not known."""
         return self._frequency_value.value
 
     @property
     def notenum(self) -> int | None:
+        """The MIDI note number nearest to :attr:`frequency`, or ``None`` if it is not known."""
         if self._notenum is not None:
             return self._notenum
         frequency = self._frequency_value.value
@@ -86,6 +120,8 @@ class Note:
 
     @property
     def notename(self) -> str:
+        """The name and octave of the note nearest to :attr:`frequency`, such as ``"A4"`` or
+        ``"C#/Db3"``, or an empty string if it is not known."""
         if self._notename is not None:
             return self._notename
         if (notenum := self.notenum) is None:
@@ -95,6 +131,9 @@ class Note:
 
     @property
     def cents(self) -> float | None:
+        """How far :attr:`frequency` is from the pitch of :attr:`notenum` in cents (hundredths of
+        a semitone), from -50.0 to 50.0, or ``None`` if it is not known. Positive values are
+        sharp and negative values are flat."""
         if self._cents is not None:
             return self._cents
         if (notenum := self.notenum) is None:
@@ -103,6 +142,14 @@ class Note:
         return self._cents
 
     def update(self, data: list | tuple | array.array | np.ndarray) -> EnvelopeState | None:
+        """Process a block of audio samples.
+
+        :param data: ``data_size`` signed 16-bit audio samples, or a float ``ndarray`` with
+            values from -1.0 to 1.0.
+        :return: The new state if it changed during this update, otherwise ``None``. The attack
+            of a note is reported once its frequency is known, which may be a few updates after
+            the note starts.
+        """
         self._notenum = self._notename = self._cents = None  # Go ahead and dump our cached values
 
         # Convert to float

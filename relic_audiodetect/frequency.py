@@ -2,6 +2,15 @@
 #
 # SPDX-License-Identifier: MIT
 
+"""
+`relic_audiodetect.frequency`
+================================================================================
+
+Detect the frequencies within an audio signal using a Fast Fourier Transform.
+
+* Author(s): Cooper Dalrymple
+"""
+
 import array
 import math
 
@@ -52,6 +61,17 @@ def _find_peaks(data: np.ndarray, height: float | None = None) -> tuple[float]:
 
 
 class Frequency:
+    """Finds the frequencies within blocks of audio samples of a fixed size.
+
+    The samples are windowed and transformed into a spectrum, and each peak of the spectrum is
+    reported as a frequency. The frequency resolution is ``sample_rate / data_size``, which is
+    refined further by interpolating between neighboring points of the spectrum.
+
+    :param int data_size: The number of samples in each block. Must be a power of 2.
+    :param int sample_rate: The sample rate of the audio in Hz.
+    :raises ValueError: If ``data_size`` is not a power of 2.
+    """
+
     def __init__(self, data_size: int, sample_rate: int):
         if not _is_pow2(data_size):
             raise ValueError("data_size must be a power of 2")
@@ -82,6 +102,13 @@ class Frequency:
         return (index + offset) * self._sample_rate / self._data_size
 
     def process(self, data: list | tuple | array.array | np.ndarray) -> None:
+        """Find the frequencies within a block of audio samples. The results are available from
+        :attr:`frequencies`, :attr:`lowest_frequency` and :attr:`most_prominent_frequency`.
+
+        :param data: ``data_size`` signed 16-bit audio samples, or a float ``ndarray`` with values
+            from -1.0 to 1.0.
+        :raises ValueError: If the length of ``data`` is not ``data_size``.
+        """
         if len(data) != self._data_size:
             raise ValueError("Data size invalid")
 
@@ -104,12 +131,16 @@ class Frequency:
 
     @property
     def frequencies(self) -> tuple[float]:
+        """The frequencies in Hz found by the last call to :meth:`process`, from lowest to
+        highest."""
         if not self._frequencies:
             return ()
         return tuple([x[0] for x in self._frequencies])
 
     @property
     def most_prominent_frequency(self) -> float | None:
+        """The frequency in Hz with the largest peak found by the last call to :meth:`process`, or
+        ``None`` if no frequencies were found."""
         if not self._frequencies:
             return None
         elif len(self._frequencies) == 1:
@@ -119,6 +150,8 @@ class Frequency:
 
     @property
     def lowest_frequency(self) -> float | None:
+        """The lowest frequency in Hz found by the last call to :meth:`process`, or ``None`` if no
+        frequencies were found. For musical notes, this is usually the fundamental."""
         if not self._frequencies:
             return None
         return self._frequencies[0][0]
@@ -127,6 +160,15 @@ class Frequency:
 def calculate_frequencies(
     data: list | tuple | array.array | np.ndarray, sample_rate: int
 ) -> tuple[float]:
+    """Find the frequencies within a block of audio samples.
+
+    If the number of samples is not a power of 2, only the largest power of 2 of them are used.
+    To process many blocks of the same size, use :class:`Frequency` instead.
+
+    :param data: Signed 16-bit audio samples, or a float ``ndarray`` with values from -1.0 to 1.0.
+    :param int sample_rate: The sample rate of the audio in Hz.
+    :return: The frequencies in Hz, from lowest to highest.
+    """
     data = data[: _nearest_pow2(len(data))]
     detect = Frequency(len(data), sample_rate)
     detect.process(data)
@@ -136,5 +178,12 @@ def calculate_frequencies(
 def calculate_frequency(
     data: list | tuple | array.array | np.ndarray, sample_rate: int
 ) -> float | None:
+    """Find the lowest frequency within a block of audio samples. See
+    :func:`calculate_frequencies`.
+
+    :param data: Signed 16-bit audio samples, or a float ``ndarray`` with values from -1.0 to 1.0.
+    :param int sample_rate: The sample rate of the audio in Hz.
+    :return: The lowest frequency in Hz, or ``None`` if no frequencies were found.
+    """
     frequencies = calculate_frequencies(data, sample_rate)
     return frequencies[0] if frequencies else None
