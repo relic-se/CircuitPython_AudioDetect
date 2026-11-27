@@ -332,6 +332,53 @@ def test_note_at_attack(frequency, notenum):
             assert reported == notenum, f"note starts at sample {start} with phase {phase}"
 
 
+@pytest.mark.parametrize(
+    ("frequency", "notenum"),
+    ((110.0, 45), (146.83, 50), (196.0, 55), (246.94, 59), (329.63, 64), (440.0, 69), (659.26, 76)),
+)
+def test_note_at_attack_with_overlapping_samples(frequency, notenum):
+    """Updates of 1024 samples of which 256 are new find notes from A2 up, within 31 ms."""
+    size = 1024
+    new = 256
+    time = np.arange(6 * size) / SAMPLE_RATE
+    for phase in range(4):
+        played = sum(
+            level * np.sin((index + 1) * (2 * np.pi * frequency * time + phase * math.pi / 2))
+            for index, level in enumerate((1.0, 0.5, 0.3, 0.2))
+        )
+        played = (0.42 * played / np.max(np.abs(played))).astype(np.float32)
+        for start in range(0, new, new // 8):
+            silence = 3 * size + start
+            data = np.concatenate([np.zeros(silence, dtype=np.float32), played])
+            note = Note(size, SAMPLE_RATE, attack_updates=3)
+            note.sensitivity = 0.9
+            reported = None
+            for position in range(0, len(data) - size, new):
+                if note.update(data[position : position + size]) == EnvelopeState.ATTACK:
+                    reported = note.notenum
+                    delay = (position + size - silence) / SAMPLE_RATE
+                    break
+            assert reported == notenum, f"note starts at sample {start} with phase {phase}"
+            assert delay < 0.031
+
+
+def test_note_attack_updates():
+    note = Note(CHUNK_SIZE, SAMPLE_RATE, attack_updates=3)
+    note.sensitivity = 0.9
+    note.update(np.zeros(CHUNK_SIZE, dtype=np.float32))
+    states = [note.update(tone(440)) for _ in range(5)]
+    assert states == [None, None, None, EnvelopeState.ATTACK, None]
+    assert note.notename == "A4"
+
+    # A note that ends while its attack is waited for is released without an attack
+    note.reset()
+    note.update(np.zeros(CHUNK_SIZE, dtype=np.float32))
+    note.update(tone(440))
+    note.update(tone(440))
+    assert note.update(np.zeros(CHUNK_SIZE, dtype=np.float32)) == EnvelopeState.RELEASE
+    assert note.update(np.zeros(CHUNK_SIZE, dtype=np.float32)) is None
+
+
 def test_note_keeps_frequency_until_next_attack():
     note = Note(CHUNK_SIZE, SAMPLE_RATE)
     note.sensitivity = 0.9

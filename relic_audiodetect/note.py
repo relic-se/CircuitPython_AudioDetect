@@ -20,19 +20,31 @@ _NOTE_NAMES = ["A", "A#/Bb", "B", "C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb",
 
 class Note:
 
-    def __init__(self, data_size: int, sample_rate: int, median_count: int = 5):
+    def __init__(
+        self,
+        data_size: int,
+        sample_rate: int,
+        median_count: int = 5,
+        attack_updates: int = 1,  # updates between the start of a note and the report of its attack
+    ):
         self._envelope = Envelope()
         self._frequency = Frequency(data_size, sample_rate)
         # The median of the last frequencies. Unlike an average, it is not moved by a single
         # update that found a harmonic or noise instead of the note.
         self._frequency_value = MovingMedian(median_count)
 
+        # The frequency of a note is taken from samples that the note fills. When every update
+        # gets new samples only, that is the update after the one in which the note starts. When
+        # the samples of an update overlap with those of the update before, it takes as many
+        # updates as it takes to replace most of the samples.
+        self._attack_updates = max(int(attack_updates), 1)
+
         self.reset()
 
     def reset(self) -> None:
         self._envelope.reset()
         self._frequency_value.reset()
-        self._attack_pending = False
+        self._attack_wait = 0  # updates left until the attack of the current note is reported
         self._notenum = self._notename = self._cents = None
 
     @property
@@ -100,28 +112,34 @@ class Note:
             # The frequency of a note is not taken from the samples in which it starts. The note
             # only fills a part of them, and what is found in them is often another note. The
             # attack is reported with the frequency of the samples that follow.
-            self._attack_pending = True
+            self._attack_wait = self._attack_updates
             return None
         elif state == EnvelopeState.RELEASE:
-            self._attack_pending = False
+            self._attack_wait = 0
 
         # Process signal if we're active
         if self._envelope.active:
+
+            # Wait for the samples to hold enough of a new note, without the cost of looking for
+            # its frequency in the meantime
+            if self._attack_wait > 1:
+                self._attack_wait -= 1
+                return None
 
             # Detect frequencies
             self._frequency.process(data)
             frequency = self._frequency.lowest_frequency
             if frequency:
-                if self._attack_pending:
+                if self._attack_wait:
                     # The frequency of a new note is not smoothed with that of the previous note
                     self._frequency_value.reset()
                 self._frequency_value.update(frequency)  # Use frequency with largest peak
 
             # The attack of a note is reported once its frequency is known
-            if self._attack_pending:
+            if self._attack_wait:
                 if not frequency:
                     return None
-                self._attack_pending = False
+                self._attack_wait = 0
                 return EnvelopeState.ATTACK
 
         return state
