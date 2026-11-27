@@ -19,74 +19,58 @@ def _nearest_pow2(value: int, max: int = 32) -> int:
 def _is_pow2(value: int, max: int = 32) -> bool:
     return _nearest_pow2(value, max) == value
 
-try:
-    import ulab  # noqa: F401 (the fallback below is used if ulab is not available)
-
-    def _fft(data: np.ndarray) -> np.ndarray:
-        # Calculate the magnitude from the FFT directly. `ulab.utils.spectrogram` returns
-        # incorrect results on builds of ulab without complex number support (ulab 6.12).
-        real, imag = np.fft.fft(data)
-        real, imag = real[:len(data) // 2], imag[:len(data) // 2]
+def _fft(data: np.ndarray) -> np.ndarray:
+    # Magnitude of the lower half of the spectrum. Calculated from the FFT directly because
+    # `ulab.utils.spectrogram` returns incorrect results on builds of ulab without complex number
+    # support (ulab 6.12).
+    half = len(data) // 2
+    result = np.fft.fft(data)
+    if isinstance(result, tuple):
+        # ulab without complex number support returns the real and imaginary parts
+        real, imag = result[0][:half], result[1][:half]
         return np.sqrt(real * real + imag * imag)
+    return abs(result[:half])
 
-    def _fftfreq(size: int, spacing: float = 1.0) -> np.ndarray:
-        # we're ignoring imaginary half
-        return np.arange(size // 2, dtype=np.int16) / (size * spacing)
+def _fftfreq(size: int, spacing: float = 1.0) -> np.ndarray:
+    # Frequency of each index of the lower half of the spectrum
+    return np.arange(size // 2, dtype=np.int16) / (size * spacing)
 
-    def _local_maxima_1d(data: np.ndarray) -> tuple:
-        midpoints = []
+def _local_maxima_1d(data: np.ndarray) -> tuple:
+    midpoints = []
 
-        i = 1
-        while i < len(data) - 1:
-            # Test if previous sample is smaller
-            if data[i - 1] < data[i]:
+    i = 1
+    while i < len(data) - 1:
+        # Test if previous sample is smaller
+        if data[i - 1] < data[i]:
 
-                # Find next sample that is unequal to x[i]
-                j = i + 1  # Index to look ahead of current sample
-                while j < len(data) - 1 and data[j] == data[i]:
-                    j += 1
+            # Find next sample that is unequal to x[i]
+            j = i + 1  # Index to look ahead of current sample
+            while j < len(data) - 1 and data[j] == data[i]:
+                j += 1
 
-                # Maxima is found if next unequal sample is smaller than x[i]
-                if data[j] < data[i]:
-                    midpoints.append((i + j - 1) // 2)
+            # Maxima is found if next unequal sample is smaller than x[i]
+            if data[j] < data[i]:
+                midpoints.append((i + j - 1) // 2)
 
-                    # Skip samples that can't be maximum
-                    i = j
-            i += 1
+                # Skip samples that can't be maximum
+                i = j
+        i += 1
 
-        return tuple(midpoints)
+    return tuple(midpoints)
 
-    def _find_peaks(data: np.ndarray, height: float|None = None) -> tuple[float]:
-        peaks = _local_maxima_1d(data)
-        peak_heights = np.array([data[i] for i in peaks], dtype=_DTYPE_FLOAT)
+def _find_peaks(data: np.ndarray, height: float|None = None) -> tuple[float]:
+    peaks = _local_maxima_1d(data)
+    peak_heights = np.array([data[i] for i in peaks], dtype=_DTYPE_FLOAT)
 
-        if height is None:
-            height = 7 * np.std(data)
+    if height is None:
+        height = 7 * np.std(data)
 
-        # Remove elements which are less than the height
-        peak_heights = np.where(peak_heights > height, peak_heights, 0)
-        valid_peaks = np.nonzero(peak_heights)[0]
-        return tuple([
-            (peaks[i], peak_heights[i]) for i in valid_peaks
-        ])
-
-except ModuleNotFoundError:
-    from scipy.fft import fft
-    from scipy.signal import find_peaks
-
-    def _fft(data: np.ndarray) -> np.ndarray:
-        return np.abs(fft(data, axis=0)[:len(data) // 2])
-
-    def _fftfreq(size: int, spacing: float = 1.0) -> np.ndarray:
-        return np.fft.fftfreq(size, spacing)[:size // 2]
-
-    def _find_peaks(data: np.ndarray, height: float|None = None) -> tuple[float]:
-        if height is None:
-            height = 7 * np.std(data)
-        peaks = find_peaks(data, height=height)
-        return tuple([
-            (peaks[0][i], peaks[1]["peak_heights"][i]) for i in range(len(peaks[0]))
-        ])
+    # Remove elements which are less than the height
+    peak_heights = np.where(peak_heights > height, peak_heights, 0)
+    valid_peaks = np.nonzero(peak_heights)[0]
+    return tuple([
+        (peaks[i], peak_heights[i]) for i in valid_peaks
+    ])
 
 class Frequency:
 
