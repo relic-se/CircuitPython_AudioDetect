@@ -199,6 +199,20 @@ def test_note_cents():
     assert note.cents == pytest.approx(cents(note.frequency, 440.0), abs=0.01)
 
 
+def test_note_frequency_of_second_note():
+    note = Note(CHUNK_SIZE, SAMPLE_RATE)
+    note.sensitivity = 0.9
+    for _ in range(5):
+        note.update(tone(440))
+    for _ in range(2):
+        note.update(np.zeros(CHUNK_SIZE, dtype=np.float32))
+    assert not note.active
+
+    assert note.update(tone(220)) == EnvelopeState.ATTACK
+    assert note.notename == "A3"
+    assert abs(note.frequency - 220) < BIN_WIDTH / 2
+
+
 def test_note_reset():
     note = Note(CHUNK_SIZE, SAMPLE_RATE)
     note.sensitivity = 0.9

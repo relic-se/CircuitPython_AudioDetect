@@ -93,6 +93,10 @@ class Note:
         # Update envelope
         state = self._envelope.update(data)
 
+        # The frequency of a new note is not averaged with the frequency of the previous note
+        if state == EnvelopeState.ATTACK:
+            self._frequency_value.reset()
+
         # Process signal if we're active
         if self._envelope.active:
 
