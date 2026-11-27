@@ -47,32 +47,26 @@ def decouple_signal(data: np.ndarray) -> np.ndarray:
 def normalized_rms(data: np.ndarray) -> float:
     return np.std(data)
 
-class MovingAverage:
+class MovingMedian:
 
-    def __init__(self, count: int = 3, weighted: bool = False):
+    def __init__(self, count: int = 5):
         self._count = count
-        self._weights = np.arange(count, dtype=np.float) / count / 2 if weighted else None
         self.reset()
 
     def reset(self) -> None:
-        self._items = None
+        self._items = []
         self._value = None
 
     def update(self, value: float) -> None:
         self._value = None
-        if self._items is None:
-            self._items = np.full(self._count, value)
-        else:
-            self._items[1:] = self._items[:len(self._items)-1]
-            self._items[0] = value
+        self._items.append(value)
+        if len(self._items) > self._count:
+            self._items.pop(0)
 
     @property
     def value(self) -> float|None:
-        if self._value is not None:
-            return self._value
-        if self._items is None:
-            return None
-        if self._weights is None:
-            return np.mean(self._items)
-        else:
-            return np.sum(self._items * self._weights)
+        if self._value is None and self._items:
+            # The middle of the values. With an even number of values the lower one of the two
+            # in the middle is used, so that the result is always a value that was given.
+            self._value = sorted(self._items)[(len(self._items) - 1) // 2]
+        return self._value
