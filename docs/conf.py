@@ -21,7 +21,8 @@ extensions = [
     "sphinx.ext.todo",
 ]
 
-autodoc_mock_imports = ["synthio", "ulab"]
+# ulab is not mocked: the library falls back to numpy, which supports the type annotations
+autodoc_mock_imports = ["synthio"]
 
 autodoc_preserve_defaults = True
 
