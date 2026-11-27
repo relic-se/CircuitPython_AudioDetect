@@ -154,7 +154,9 @@ class Frequency:
 
     @property
     def frequencies(self) -> tuple[float]:
-        return tuple([x[0] for x in range(self._frequencies)])
+        if not self._frequencies:
+            return ()
+        return tuple([x[0] for x in self._frequencies])
 
     @property
     def most_prominent_frequency(self) -> float|None:
