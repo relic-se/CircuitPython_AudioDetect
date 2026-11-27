@@ -9,3 +9,12 @@ API Reference
 
 .. automodule:: relic_audiodetect
     :members:
+
+.. automodule:: relic_audiodetect.envelope
+    :members:
+
+.. automodule:: relic_audiodetect.frequency
+    :members:
+
+.. automodule:: relic_audiodetect.note
+    :members:
